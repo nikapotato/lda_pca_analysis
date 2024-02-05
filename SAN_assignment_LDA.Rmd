@@ -1,0 +1,269 @@
+---
+title: "Linear Discriminanat Analysis"
+author: "Nikola Sokolová"
+date: "November 30, 2020"
+output: html_document
+---
+
+#### Introduction
+LDA and Principal Component Analysis (PCA) are two techniques
+for dimensionality reduction. PCA can be decribed as an unsupervised algorithm that ignores data labels and aims to find directions which maximalize
+the variance in a data. In comparison with PCA, LDA is a supervised algorithm and aims to project a dataset onto a lower dimensional space with good
+class separability. In other words, LDA maximalizes the ratio of betweenclass variance and the within-class variance in a given data.
+
+
+
+#### Input data 
+The dataset is located at wine.csv and classifies wines into three classes using of 13 continuous attributes.
+
+#### Linear Discriminant Analysis
+LDA finds directions where classes are well-separated,
+i.e. LDA maximizes the ratio of between-class variance and the within-class
+variance. Firstly, assume that $C$ is a set of classes and set $D$, which represents
+a training dataset, is defined as $D = \{x_1, x_2, . . . , x_N \}$.
+
+The between-classes scatter matrix SB is defined as:
+$S_b = \sum_c N_C(\mu_c -\overline{x})(\mu_c - \overline{x})^T$, where $\overline{x}$ is a vector represents the overall mean of the data, µ represents the mean corresponding to each class, and $N_C$ are sizes of the respective classes.
+
+The within-classes scatter matrix $S_W$ is defined as:
+
+$S_W = \sum_c \sum_{x \in D_c}(x - \overline{\mu_c})(x - \overline{\mu_c})^T$
+
+Next, we will solve the generalized eigenvalue problem for the matrix $S_W^{-1}S_B$ to obtain the linear discriminants, i.e.
+
+$(S_W^{-1}S_B)w = \lambda w$
+
+where $w$ represents an eigenvector and $\lambda$ represents an eigenvalue. Finally,
+choose k eigenvectors with the largest eigenvalue and transform the samples
+onto the new subspace.
+
+#### Step by step
+
+##### Load the dataset 
+```{r}
+mydata <- read.csv("wine.csv", header = FALSE)
+labels <- mydata[, 1]
+labels <- as.factor(labels)
+mydata <- mydata[, -1]
+
+numclass <- length(levels(labels)) #number of classes
+# 	1) Alcohol
+# 	2) Malic acid
+# 	3) Ash
+#	  4) Alcalinity of ash
+# 	5) Magnesium
+#	  6) Total phenols
+#   7) Flavanoids
+# 	8) Nonflavanoid phenols
+# 	9) Proanthocyanins
+#	  10)Color intensity
+# 	11)Hue
+# 	12)OD280/OD315 of diluted wines
+# 	13)Proline   
+
+mean <- colMeans(mydata)
+labels
+```
+
+##### Compute the within-scatter matrix 
+#number of classes = n
+$S_W = \sum_c \sum_{x \in D_c}(x - \overline{\mu_c})(x - \overline{\mu_c})^T$
+```{r}
+ComputeWithinScatter <- function(data, n, labels)
+{
+  
+  #initialization of the result
+  # template: matrix(nrow = nrow(newData), ncol = length(levels(labels)))
+  withinMatrix = matrix(0, nrow = ncol(data), ncol = ncol(data)) 
+  c = length(levels(labels)) # n ako vstup nefungoval
+    
+  # extracteddata = data[labels == i,]
+  # extracteddata
+  for (i in 1:c){
+    mu_c = rep(colMeans(data[labels == i,]), rep.int(nrow(data[labels == i,]), ncol(data[labels == i,])))
+    withinMatrixThisClass = matrix(0, nrow = ncol(data), ncol = ncol(data))
+    
+    #size of this class
+    m = nrow(data[labels == i,])
+    
+    #sum of this class
+    for (j in 1:m){
+      # avg_x - mu_c * (avg_x - mu_c)_transposed
+      # sum of all classes, j = index of vector in class
+      withinMatrixThisClass = withinMatrixThisClass + as.matrix(data[labels == i,] - mu_c)[j,] %*% t(as.matrix(data[labels == i,] - mu_c)[j,])
+    }
+    # sum of all classes == Sw
+    withinMatrix = withinMatrix + withinMatrixThisClass;
+  }
+  return(withinMatrix)
+}
+```
+
+##### Compute the between-scatter matrix
+$S_b = \sum_c N_C(\mu_c -\overline{x})(\mu_c - \overline{x})^T$
+```{r}
+ComputeBetweenScatter <- function(data, n, mean, labels)
+{
+  # N_c = sizes of respective classes
+  #initialization
+  betweenMatrix = matrix(0, nrow = ncol(data), ncol = ncol(data))
+  c = length(levels(labels)) # n ako vstup nefungoval
+  
+  # m = size of class
+  for (i in 1:c){
+    mu_c = colMeans(data[labels == i,] )
+    nc = length(labels[labels==i]) 
+    # mu_c - avg_x * (mu_c - avg_x)_transposed
+    betweenMatrix = betweenMatrix + nc * ( (mu_c-mean) %*% t(mu_c-mean))
+  }
+  
+  return(betweenMatrix)
+}
+```
+
+
+##### Solve the EigenProblem and return eigen-vector
+```{r}
+SolveEigenProblem <- function(withinMatrix, betweenMatrix, prior)
+{
+  # Sw^-1 * Sb solve: https://www.geeksforgeeks.org/inverse-of-matrix-in-r/?ref=lbp, https://www.geeksforgeeks.org/solve-linear-algebraic-equation-in-r-programming-solve-function/
+  eivectors = eigen(solve(withinMatrix) %*% betweenMatrix)
+  return(eivectors)
+}
+```
+
+##### Visualize the results
+Data are projected into lower-dimensional subspace.
+
+```{r}
+ComputeCentroids <- function(data, labels){
+  yGroupedMean <- aggregate(as.data.frame(data), by = list(labels), FUN = mean)
+  rownames(yGroupedMean) <- yGroupedMean[,1]
+  yGroupedMean <- yGroupedMean[,-1]
+  return(yGroupedMean)
+}
+
+Classify <- function(newData, eigenVectors, labels, centroids){
+  y <- as.matrix(newData) %*% eigenVectors[,1:(length(levels(labels))-1)]
+  prior <- table(labels)/sum(table(labels))
+  
+  classification <- matrix(nrow = nrow(newData), ncol = length(levels(labels)))
+  colnames(classification) <- levels(labels)
+  for(c in levels(labels))
+  {
+    classification[,c] <- as.matrix(0.5*rowSums((y - matrix(rep(as.matrix(centroids[c,]),
+                                                                nrow(newData)), nrow = nrow(newData),
+                                                            byrow = TRUE) )^2)
+                                    - log(prior[c]))
+  }
+  return(levels(labels)[apply(classification, MARGIN = 1, which.min)])
+}
+
+CrossvalidationLDA <- function(mydata, labels, kfolds = 10){
+  set.seed(17)
+  #randomly shuffle the data
+  random <- sample(nrow(mydata))
+  data <-mydata[random,]
+  labels <- labels[random]
+  #Create 10 equally size folds
+  folds <- cut(seq(1,nrow(data)),breaks=kfolds,labels=FALSE)
+  acc <- rep(0, times = kfolds)
+  #10 fold cross validation
+  for(i in 1:kfolds){
+    #Segment your data by fold using the which() function 
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- data[testIndexes, ]
+    trainData <- data[-testIndexes, ]
+    testLabels <- labels[testIndexes]
+    trainLabels <- labels[-testIndexes]
+    
+    eigenLDA <- LDA(trainData, trainLabels)
+    centroids <- ComputeCentroids(as.matrix(trainData) %*% eigenLDA[,1:(length(levels(trainLabels))-1)],
+                                  labels = trainLabels)
+    pre <- Classify(newData = testData, labels = trainLabels, eigenVectors = eigenLDA,
+                    centroids = centroids)
+    acc[i] <- sum(pre == testLabels)/length(testLabels)
+  }
+  return(mean(acc))
+}
+
+LDA <- function(mydata, labels){
+
+  #number of classes
+  n <-length(levels(labels))
+
+  # 1) split the data w.r.t. given factors
+  splittedData <- split(mydata, labels)
+  
+  # 2) scatter matrices
+  #############  within-class scatter matrix Sw ##################
+  withinScatterMatrix <- ComputeWithinScatter(mydata,numclass, labels) 
+  
+  #############  between-class scatter matrix Sb ##################
+  betweenScatterMatrix <- ComputeBetweenScatter(data = mydata, n = numclass, mean, labels = labels)
+  
+  # 3)  eigen problem
+  ############ solve Eigen problem ################################
+  ei <- SolveEigenProblem(withinScatterMatrix, betweenScatterMatrix)
+  
+  #transform the samples onto the new subspace
+  y <- (as.matrix(mydata) %*% ei$vectors[,1:2])
+  
+  ## visual comparison with PCA
+  par(mfrow=c(1,2))
+  pca <- prcomp(mydata)
+  plot(y[,1], y[,2], col = labels, pch = 21, lwd = 2, xlab = "LD1" , ylab = "LD2", main = "LDA")
+  plot(-pca$x, col = labels, pch = 21, lwd = 2, main = "PCA")
+
+  return(ei$vectors)
+}
+
+############################# FUNCTIONS END ###################################
+
+
+############################# MAIN ##########################################
+
+#compute LDA and return corresponding eigenvectors
+eigenLDA <- LDA(mydata, labels)
+#find centroids in the transformed data
+centroids <- ComputeCentroids(as.matrix(mydata) %*% eigenLDA[,1:(length(levels(labels))-1)],
+                              labels = labels)
+#make predictions on the "mydata"
+prediction <- Classify(newData = mydata, labels = labels, eigenVectors = eigenLDA,
+         centroids = centroids)
+#ACC
+acc <- sum(prediction == labels)/(length(labels))
+
+#CrossValidation
+accLDA <- CrossvalidationLDA(mydata, labels, kfolds = 10)
+```
+
+##### Results
+The ComputeWithinScatter and ComputeBetweenScatter functions were modified to include the label parameter, and the ComputeBetweenScatter function was also modified to include the mean parameter, because without these modifications, errors were continuously thrown.
+
+We experimented with two techniques for dimensionality reduction, PCA (Principal Component Analysis) and LDA (Linear Discriminant Analysis), using a provided dataset of wines. Each wine in the dataset is characterized by the following thirteen attributes:
+
+- Alcohol
+- Malic Acid
+- Ash
+- Alkalinity of Ash
+- Magnesium
+- Total Phenols
+- Flavanoids
+- Nonflavanoid Phenols
+- Proanthocyanins
+- Color Intensity
+- Hue
+- OD280/OD315 of Diluted Wines
+- Proline
+
+After analyzing the mentioned dataset (e.g., by outputting values), we can observe significant differences between the values of attributes V2-V14, where higher values are noted for attributes like V14 and V11.
+
+```
+acc
+accLDA
+```
+
+The training accuracy value matches the classification accuracy mentioned in the wine_info.txt document. However, since the accLDA value is not equal to 1, it indicates that the wines are not perfectly linearly separated into classes. This means that it would be appropriate to consider a more suitable method for the given wine dataset. According to the description provided in the mentioned text document:
+"The data was used with many others for comparing various classifiers. The classes are separable, though only RDA has achieved 100% correct classification. (RDA: 100%, QDA: 99.4%, LDA: 98.9%, 1NN: 96.1% (z-transformed data)) (All results using the leave-one-out technique)"
+A more suitable method might be, for example, QDA with a 99.4% accuracy or RDA.
