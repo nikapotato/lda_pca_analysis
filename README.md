@@ -65,6 +65,7 @@ We experimented with two techniques for dimensionality reduction, PCA (Principal
 - Proline
 
 After analyzing the mentioned dataset (e.g., by outputting values), we can observe significant differences between the values of attributes V2-V14, where higher values are noted for attributes like V14 and V11.
-The training accuracy value matches the classification accuracy mentioned in the wine_info.txt document. However, since the accLDA value is not equal to 1, it indicates that the wines are not perfectly linearly separated into classes. This means that it would be appropriate to consider a more suitable method for the given wine dataset. According to the description provided in the mentioned text document:
+The training accuracy value matches the classification accuracy mentioned in the wine_info.txt document. However, since the accLDA value is not equal to 1, it indicates that the wines are not perfectly linearly separated into classes. This means that it would be appropriate to consider a more suitable method for the given wine dataset.
+According to: 
 "The data was used with many others for comparing various classifiers. The classes are separable, though only RDA has achieved 100% correct classification. (RDA: 100%, QDA: 99.4%, LDA: 98.9%, 1NN: 96.1% (z-transformed data)) (All results using the leave-one-out technique)"
 A more suitable method might be, for example, QDA with a 99.4% accuracy or RDA.
